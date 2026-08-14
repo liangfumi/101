@@ -1,0 +1,218 @@
+<h2 class="sr-only">台北101バーチャルツアークイズゲーム。エレベーターで6つのフロアを昇りながら、台北101に関するクイズに答えます。</h2>
+
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem;">
+  <div style="display:flex; align-items:center; gap:8px;">
+    <i class="ti ti-building-skyscraper" style="font-size:20px; color:var(--text-accent);" aria-hidden="true"></i>
+    <span style="font-size:15px; font-weight:500;">台北101 バーチャルツアー</span>
+  </div>
+  <div id="score-badge" style="font-size:13px; color:var(--text-secondary); background:var(--surface-1); padding:4px 10px; border-radius:var(--radius);">スコア 0/6</div>
+</div>
+
+<div id="floor-strip" style="display:flex; align-items:center; margin-bottom:1.5rem;"></div>
+
+<div id="content"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/tabler-icons.min.css"></script>
+<script>
+var stops = [
+  {
+    floor: "1F",
+    name: "エントランスロビー",
+    icon: "ti-door-enter",
+    fact: "台北101は2004年に完成しました。地上101階、地下5階、高さは508メートル。2010年にドバイのブルジュ・ハリファが完成するまで、世界で一番高いビルでした。",
+    question: "台北101の高さは何メートルでしょう?",
+    options: ["452メートル", "508メートル", "555メートル", "632メートル"],
+    correct: 1,
+    explain: "正解は508メートルです。屋上のアンテナを含めると建物全体の高さになります。"
+  },
+  {
+    floor: "5F",
+    name: "台北101モール",
+    icon: "ti-shopping-bag",
+    fact: "低層階の1階から5階は、世界的な高級ブランド店が並ぶ台北101モールになっています。",
+    question: "台北101はどの都市にあるでしょう?",
+    options: ["高雄", "台中", "台北", "台南"],
+    correct: 2,
+    explain: "正解は台北です。台湾の首都、台北市の信義区に位置しています。"
+  },
+  {
+    floor: "26F-38F",
+    name: "竹の節デザイン",
+    icon: "ti-plant-2",
+    fact: "外観は8階ごとに区切られ、竹の節のような形をしています。中華文化では「8」は発音が「発財(お金が儲かる)」に通じる縁起の良い数字とされ、如意(幸運を呼ぶ道具)のモチーフも取り入れられています。",
+    question: "外観が8階ごとに区切られているのはなぜでしょう?",
+    options: ["建築コストを抑えるため", "8は縁起の良い数字だから", "耐震のため必要だから", "単なる偶然"],
+    correct: 1,
+    explain: "正解は「8は縁起の良い数字だから」です。台湾や中華圏では8は幸運の象徴とされています。"
+  },
+  {
+    floor: "87F-92F",
+    name: "風除ダンパー",
+    icon: "ti-circle-dot",
+    fact: "87階から92階の間には、重さ660トンの巨大な金色の球体「風除ダンパー(制振装置)」が吊り下げられています。台風や地震の揺れを吸収し、建物を守る役割を果たしています。",
+    question: "風除ダンパーの主な役割は何でしょう?",
+    options: ["展望台の装飾", "エレベーターを動かす", "建物の揺れを軽減する", "雨水を貯める"],
+    correct: 2,
+    explain: "正解は「建物の揺れを軽減する」です。台風や地震の際に建物の揺れを最大40%抑えると言われています。"
+  },
+  {
+    floor: "89F",
+    name: "室内展望台",
+    icon: "ti-elevator",
+    fact: "5階から89階の室内展望台までは、世界最速級のエレベーターで一気に上がります。分速1010メートルというスピードで、わずか約37秒で到着します。",
+    question: "このエレベーターは何階から何階までを約37秒で結ぶでしょう?",
+    options: ["1F→89F", "5F→89F", "1F→101F", "5F→101F"],
+    correct: 1,
+    explain: "正解は「5F→89F」です。耳がツンとする間もなく展望台に到着します。"
+  },
+  {
+    floor: "91F",
+    name: "屋外展望台",
+    icon: "ti-fireworks",
+    fact: "91階の屋外展望台からは台北の街を360度見渡せます。台北101は大晦日に打ち上げられる壮大な花火ショーでも世界的に有名です。",
+    question: "台北101で毎年大晦日に行われる有名なイベントは?",
+    options: ["マラソン大会", "花火ショー", "音楽フェスティバル", "灯篭流し"],
+    correct: 1,
+    explain: "正解は「花火ショー」です。ビル全体を使った花火は台湾の年越しの風物詩です。"
+  }
+];
+
+var current = 0;
+var score = 0;
+var answered = false;
+
+function renderStrip() {
+  var strip = document.getElementById("floor-strip");
+  var html = "";
+  for (var i = 0; i < stops.length; i++) {
+    var state = i < current ? "done" : (i === current ? "active" : "todo");
+    var dotColor = state === "done" ? "var(--fill-success, var(--text-success))" : (state === "active" ? "var(--text-accent)" : "var(--border-strong)");
+    var dotBg = state === "active" ? "var(--bg-accent)" : "transparent";
+    html += '<div style="display:flex; flex-direction:column; align-items:center; flex:1; min-width:0;">';
+    html += '<div style="width:26px; height:26px; border-radius:50%; border:1.5px solid ' + dotColor + '; background:' + dotBg + '; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:500; color:' + (state === "todo" ? "var(--text-muted)" : dotColor) + ';">';
+    html += (state === "done" ? '<i class="ti ti-check" style="font-size:14px;" aria-hidden="true"></i>' : (i + 1));
+    html += '</div>';
+    html += '<span style="font-size:10px; color:var(--text-muted); margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:52px;">' + stops[i].floor + '</span>';
+    html += '</div>';
+    if (i < stops.length - 1) {
+      html += '<div style="height:1.5px; flex:0.6; background:' + (i < current ? "var(--fill-success, var(--text-success))" : "var(--border)") + '; margin-bottom:16px;"></div>';
+    }
+  }
+  strip.innerHTML = html;
+}
+
+function renderScore() {
+  document.getElementById("score-badge").textContent = "スコア " + score + "/" + stops.length;
+}
+
+function renderStop() {
+  answered = false;
+  var stop = stops[current];
+  var html = '';
+  html += '<div style="background:var(--surface-1); border-radius:12px; padding:1.25rem;">';
+  html += '<div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">';
+  html += '<div style="width:40px; height:40px; border-radius:10px; background:var(--bg-accent); display:flex; align-items:center; justify-content:center; flex-shrink:0;"><i class="ti ' + stop.icon + '" style="font-size:20px; color:var(--text-accent);" aria-hidden="true"></i></div>';
+  html += '<div><p style="font-weight:500; font-size:16px; margin:0;">' + stop.floor + ' ' + stop.name + '</p><p style="font-size:12px; color:var(--text-muted); margin:0;">' + (current + 1) + ' / ' + stops.length + '</p></div>';
+  html += '</div>';
+  html += '<p style="font-size:14px; color:var(--text-secondary); line-height:1.7; margin:0 0 1.25rem;">' + stop.fact + '</p>';
+  html += '<div style="border-top:0.5px solid var(--border); padding-top:1rem;">';
+  html += '<p style="font-size:14px; font-weight:500; margin:0 0 10px;">' + stop.question + '</p>';
+  html += '<div id="options" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">';
+  for (var i = 0; i < stop.options.length; i++) {
+    html += '<button id="opt-' + i + '" onclick="selectAnswer(' + i + ')" style="text-align:left; font-size:13px; padding:10px 12px; white-space:normal; line-height:1.4;">' + stop.options[i] + '</button>';
+  }
+  html += '</div>';
+  html += '<p id="feedback" style="font-size:13px; margin:10px 0 0; min-height:18px;"></p>';
+  html += '<p id="error-msg" style="font-size:13px; color:var(--text-danger); margin:6px 0 0; display:none;">選択肢を選んでください</p>';
+  html += '</div>';
+  html += '<div style="margin-top:1rem; display:flex; justify-content:flex-end;">';
+  html += '<button id="next-btn" onclick="goNext()" style="font-size:13px; padding:8px 16px; opacity:0.5; pointer-events:none;">' + (current === stops.length - 1 ? '結果を見る' : '次のフロアへ上昇する') + ' <i class="ti ti-arrow-right" style="font-size:14px; vertical-align:-2px;" aria-hidden="true"></i></button>';
+  html += '</div>';
+  html += '</div>';
+  document.getElementById("content").innerHTML = html;
+  renderStrip();
+  renderScore();
+}
+
+function selectAnswer(i) {
+  if (answered) return;
+  answered = true;
+  var stop = stops[current];
+  document.getElementById("error-msg").style.display = "none";
+  for (var j = 0; j < stop.options.length; j++) {
+    var btn = document.getElementById("opt-" + j);
+    btn.style.pointerEvents = "none";
+    if (j === stop.correct) {
+      btn.style.borderColor = "var(--border-success)";
+      btn.style.background = "var(--bg-success)";
+      btn.style.color = "var(--text-success)";
+    } else if (j === i) {
+      btn.style.borderColor = "var(--border-danger)";
+      btn.style.background = "var(--bg-danger)";
+      btn.style.color = "var(--text-danger)";
+    }
+  }
+  var fb = document.getElementById("feedback");
+  if (i === stop.correct) {
+    score++;
+    renderScore();
+    fb.style.color = "var(--text-success)";
+    fb.innerHTML = '<i class="ti ti-check" style="font-size:14px; vertical-align:-2px;" aria-hidden="true"></i> 正解! ' + stop.explain;
+  } else {
+    fb.style.color = "var(--text-danger)";
+    fb.innerHTML = '<i class="ti ti-x" style="font-size:14px; vertical-align:-2px;" aria-hidden="true"></i> 残念! ' + stop.explain;
+  }
+  var nextBtn = document.getElementById("next-btn");
+  nextBtn.style.opacity = "1";
+  nextBtn.style.pointerEvents = "auto";
+}
+
+function goNext() {
+  if (!answered) {
+    document.getElementById("error-msg").style.display = "block";
+    return;
+  }
+  if (current < stops.length - 1) {
+    current++;
+    renderStop();
+  } else {
+    renderResult();
+  }
+}
+
+function renderResult() {
+  var pct = Math.round((score / stops.length) * 100);
+  var title, msg, icon;
+  if (score === stops.length) {
+    title = "台北101マスター";
+    msg = "満点です。もう台北101のガイドができますね。";
+    icon = "ti-trophy";
+  } else if (score >= stops.length / 2) {
+    title = "台北101エキスパート";
+    msg = "台北101についてよく理解できました。";
+    icon = "ti-star";
+  } else {
+    title = "台北101ビギナー";
+    msg = "また遊んで、台北101についてもっと詳しくなりましょう。";
+    icon = "ti-building-skyscraper";
+  }
+  var html = '';
+  html += '<div style="background:var(--surface-1); border-radius:12px; padding:2rem 1.25rem; text-align:center;">';
+  html += '<i class="ti ' + icon + '" style="font-size:36px; color:var(--text-accent);" aria-hidden="true"></i>';
+  html += '<p style="font-size:18px; font-weight:500; margin:12px 0 4px;">' + title + '</p>';
+  html += '<p style="font-size:14px; color:var(--text-secondary); margin:0 0 1.25rem;">' + msg + '</p>';
+  html += '<p style="font-size:32px; font-weight:500; margin:0;">' + score + ' / ' + stops.length + '</p>';
+  html += '<p style="font-size:13px; color:var(--text-muted); margin:4px 0 1.5rem;">正答率 ' + pct + '%</p>';
+  html += '<button onclick="restart()" style="font-size:13px; padding:8px 18px;"><i class="ti ti-refresh" style="font-size:14px; vertical-align:-2px; margin-right:4px;" aria-hidden="true"></i>もう一度ツアーする</button>';
+  html += '</div>';
+  document.getElementById("content").innerHTML = html;
+}
+
+function restart() {
+  current = 0;
+  score = 0;
+  renderStop();
+}
+
+renderStop();
+</script>
