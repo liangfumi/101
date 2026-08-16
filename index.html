@@ -1,0 +1,331 @@
+<style>
+  #t101-game, #t101-game * { box-sizing: border-box; }
+  #t101-game { max-width: 100%; overflow-x: hidden; }
+  #t101-game p, #t101-game span, #t101-game button { overflow-wrap: break-word; word-break: break-word; }
+</style>
+
+<div id="t101-game">
+<h2 class="sr-only">台北101バーチャルツアークイズゲーム。エレベーターで6つのフロアを昇りながら、台北101に関するクイズに答えます。音声読み上げ対応。</h2>
+
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.8rem; gap:10px; flex-wrap:wrap;">
+  <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+    <i class="ti ti-building-skyscraper" style="font-size:44px; color:var(--text-accent); flex-shrink:0;" aria-hidden="true"></i>
+    <span style="font-size:60px; font-weight:500; line-height:1.15;">台北101ツアー</span>
+  </div>
+  <div id="score-badge" style="font-size:60px; color:var(--text-secondary); background:var(--surface-1); padding:6px 16px; border-radius:var(--radius); flex-shrink:0;">0/6</div>
+</div>
+
+<p id="floor-indicator" style="font-size:60px; font-weight:500; margin:0 0 10px; line-height:1.2;">フロア 1 / 6</p>
+<div style="height:14px; background:var(--border); border-radius:8px; overflow:hidden; margin-bottom:1.2rem;">
+  <div id="progress-bar" style="height:100%; width:0%; background:var(--text-accent); transition:width 0.3s;"></div>
+</div>
+
+<div id="content"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/tabler-icons.min.css"></script>
+<script>
+var stops = [
+  {
+    floor: "1F",
+    name: "エントランスロビー",
+    icon: "ti-door-enter",
+    fact: "台北101は2004年に完成しました。地上101階、地下5階、高さは508メートル。2010年にドバイのブルジュ・ハリファが完成するまで、世界で一番高いビルでした。",
+    question: "台北101の高さは何メートル?",
+    options: ["452メートル", "508メートル", "555メートル", "632メートル"],
+    correct: 1,
+    explain: "正解は508メートルです。屋上のアンテナを含めた高さです。"
+  },
+  {
+    floor: "5F",
+    name: "台北101モール",
+    icon: "ti-shopping-bag",
+    fact: "低層階の1階から5階は、世界的な高級ブランド店が並ぶ台北101モールになっています。",
+    question: "台北101はどの都市にある?",
+    options: ["高雄", "台中", "台北", "台南"],
+    correct: 2,
+    explain: "正解は台北です。台湾の首都、信義区に位置しています。"
+  },
+  {
+    floor: "26-38F",
+    name: "竹の節デザイン",
+    icon: "ti-plant-2",
+    fact: "外観は8階ごとに区切られ、竹の節のような形をしています。中華文化では「8」は「発財(お金が儲かる)」に通じる縁起の良い数字です。",
+    question: "8階ごとに区切られているのはなぜ?",
+    options: ["建築コストを抑えるため", "8は縁起の良い数字だから", "耐震のため必要だから", "単なる偶然"],
+    correct: 1,
+    explain: "正解は「8は縁起の良い数字だから」です。"
+  },
+  {
+    floor: "87-92F",
+    name: "風除ダンパー",
+    icon: "ti-circle-dot",
+    fact: "87階から92階の間には、重さ660トンの金色の球体「風除ダンパー」が吊り下げられ、台風や地震の揺れを軽減します。",
+    question: "風除ダンパーの主な役割は?",
+    options: ["展望台の装飾", "エレベーターを動かす", "建物の揺れを軽減する", "雨水を貯める"],
+    correct: 2,
+    explain: "正解は「建物の揺れを軽減する」です。"
+  },
+  {
+    floor: "89F",
+    name: "室内展望台",
+    icon: "ti-elevator",
+    fact: "5階から89階までは世界最速級のエレベーターで一気に上がります。分速1010メートルで約37秒で到着します。",
+    question: "エレベーターは何階から何階まで37秒?",
+    options: ["1F→89F", "5F→89F", "1F→101F", "5F→101F"],
+    correct: 1,
+    explain: "正解は「5F→89F」です。"
+  },
+  {
+    floor: "91F",
+    name: "屋外展望台",
+    icon: "ti-fireworks",
+    fact: "91階の屋外展望台からは台北の街を360度見渡せます。大晦日の花火ショーでも世界的に有名です。",
+    question: "毎年大晦日に行われる有名なイベントは?",
+    options: ["マラソン大会", "花火ショー", "音楽フェスティバル", "灯篭流し"],
+    correct: 1,
+    explain: "正解は「花火ショー」です。"
+  }
+];
+
+var current = 0;
+var phase = "fact";
+var score = 0;
+var answered = false;
+var speechSegments = [];
+var shuffledIdx = [0, 1, 2, 3];
+var EXPLAIN_COLOR = "#0ABAB5";
+var EXPLAIN_BG = "#E6FBFA";
+var QUIZ_BTN_COLOR = "#EC407A";
+
+function toSpeechFriendly(t) {
+  return t.split("台北101").join("たいぺい　いち　まる　いち");
+}
+
+// Split text into language segments so that 発財 (a Chinese term) is
+// read with Chinese (zh-TW) pronunciation, and the rest stays Japanese.
+function toSpeechSegments(text) {
+  var segments = [];
+  var idx = text.indexOf("発財");
+  if (idx === -1) {
+    segments.push({ text: text, lang: "ja-JP" });
+    return segments;
+  }
+  var before = text.slice(0, idx);
+  var after = text.slice(idx + 2);
+  if (before) segments.push({ text: before, lang: "ja-JP" });
+  segments.push({ text: "發財", lang: "zh-TW" });
+  if (after) segments.push({ text: after, lang: "ja-JP" });
+  return segments;
+}
+
+function buildSpeech(text) {
+  return toSpeechSegments(toSpeechFriendly(text));
+}
+
+function shuffle(arr) {
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+  }
+  return a;
+}
+
+var isSpeaking = false;
+var playGeneration = 0;
+
+function updateSpeakBtn(playing) {
+  var btn = document.getElementById("speak-btn");
+  if (!btn) return;
+  btn.innerHTML = playing
+    ? '<i class="ti ti-player-stop-filled" style="font-size:1em; vertical-align:-0.12em;" aria-hidden="true"></i> 停止する'
+    : '<i class="ti ti-volume" style="font-size:1em; vertical-align:-0.12em;" aria-hidden="true"></i> 音声で聞く';
+}
+
+function stopSpeech() {
+  playGeneration++;
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  isSpeaking = false;
+  updateSpeakBtn(false);
+}
+
+function playSegmentsFrom(segments, idx, gen) {
+  if (gen !== playGeneration) return;
+  if (idx >= segments.length) { isSpeaking = false; updateSpeakBtn(false); return; }
+  var seg = segments[idx];
+  var u = new SpeechSynthesisUtterance(seg.text);
+  u.lang = seg.lang;
+  u.rate = 0.92;
+  var voices = window.speechSynthesis.getVoices();
+  var langPrefix = seg.lang.split("-")[0];
+  for (var i = 0; i < voices.length; i++) {
+    if (voices[i].lang && voices[i].lang.indexOf(langPrefix) === 0) { u.voice = voices[i]; break; }
+  }
+  u.onend = function () { playSegmentsFrom(segments, idx + 1, gen); };
+  u.onerror = function () { playSegmentsFrom(segments, idx + 1, gen); };
+  window.speechSynthesis.speak(u);
+}
+
+function toggleSpeak() {
+  if (!("speechSynthesis" in window)) return;
+  if (isSpeaking) { stopSpeech(); return; }
+  playGeneration++;
+  var myGen = playGeneration;
+  isSpeaking = true;
+  updateSpeakBtn(true);
+  playSegmentsFrom(speechSegments, 0, myGen);
+}
+
+function renderTopNav() {
+  document.getElementById("floor-indicator").textContent = "フロア " + (current + 1) + " / " + stops.length;
+  document.getElementById("score-badge").textContent = score + "/" + stops.length;
+  var pct = Math.round((current / stops.length) * 100);
+  document.getElementById("progress-bar").style.width = pct + "%";
+}
+
+function headerBlock(stop, tag) {
+  var html = '<div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">';
+  html += '<div style="width:52px; height:52px; border-radius:12px; background:var(--bg-accent); display:flex; align-items:center; justify-content:center; flex-shrink:0;"><i class="ti ' + stop.icon + '" style="font-size:26px; color:var(--text-accent);" aria-hidden="true"></i></div>';
+  html += '<div style="min-width:0;"><p style="font-weight:500; font-size:60px; margin:0; line-height:1.15;">' + stop.floor + ' ' + stop.name + '</p></div>';
+  html += '</div>';
+  html += '<p style="font-size:60px; font-weight:500; color:var(--text-accent); margin:0 0 14px; line-height:1.15;">' + tag + '</p>';
+  return html;
+}
+
+function speakButtonHtml() {
+  return '<button id="speak-btn" onclick="toggleSpeak()" style="font-size:60px; padding:14px 16px; width:100%; margin-bottom:18px; display:flex; align-items:center; justify-content:center; gap:12px; line-height:1.2;"><i class="ti ti-volume" style="font-size:1em; vertical-align:-0.12em;" aria-hidden="true"></i> 音声で聞く</button>';
+}
+
+function renderFact() {
+  stopSpeech();
+  var stop = stops[current];
+  speechSegments = buildSpeech(stop.fact);
+  var html = '<div style="background:var(--surface-1); border-radius:12px; padding:0.8rem 0.6rem;">';
+  html += headerBlock(stop, "豆知識");
+  html += speakButtonHtml();
+  html += '<p style="font-size:60px; color:var(--text-primary, var(--text-secondary)); line-height:1.35; margin:0 0 1.1rem;">' + stop.fact + '</p>';
+  html += '<button onclick="goToQuiz()" style="font-size:60px; padding:16px 12px; width:100%; line-height:1.25; background:' + QUIZ_BTN_COLOR + '; border-color:' + QUIZ_BTN_COLOR + '; color:#ffffff;">クイズに挑戦</button>';
+  html += '</div>';
+  document.getElementById("content").innerHTML = html;
+  renderTopNav();
+}
+
+function renderQuiz() {
+  stopSpeech();
+  answered = false;
+  var stop = stops[current];
+  shuffledIdx = shuffle([0, 1, 2, 3]);
+  var narrationText = stop.question;
+  for (var k = 0; k < shuffledIdx.length; k++) narrationText += "。 " + stop.options[shuffledIdx[k]];
+  speechSegments = buildSpeech(narrationText);
+  var html = '<div style="background:var(--surface-1); border-radius:12px; padding:0.8rem 0.5rem;">';
+  html += headerBlock(stop, "クイズ");
+  html += speakButtonHtml();
+  html += '<p style="font-size:60px; font-weight:500; margin:0 0 16px; line-height:1.3;">' + stop.question + '</p>';
+  html += '<div id="options" style="display:flex; flex-direction:column; gap:10px;">';
+  for (var pos = 0; pos < shuffledIdx.length; pos++) {
+    var origIdx = shuffledIdx[pos];
+    html += '<button id="opt-' + origIdx + '" onclick="selectAnswer(' + origIdx + ')" style="display:block; text-align:left; font-size:60px; line-height:1.2; padding:10px 12px; white-space:normal; width:100%;">' + stop.options[origIdx] + '</button>';
+  }
+  html += '</div>';
+  html += '<p id="feedback" style="font-size:60px; margin:14px 0 0; min-height:20px; line-height:1.3; color:' + EXPLAIN_COLOR + ';"></p>';
+  html += '<p id="error-msg" style="font-size:60px; color:var(--text-danger); margin:6px 0 0; display:none; line-height:1.2;">選択肢を選んでください</p>';
+  html += '<div style="margin-top:1rem;">';
+  html += '<button id="next-btn" onclick="goNext()" style="font-size:60px; padding:16px 12px; opacity:0.5; pointer-events:none; width:100%; line-height:1.25;">' + (current === stops.length - 1 ? '結果を見る' : '次のフロアへ') + '</button>';
+  html += '</div>';
+  html += '</div>';
+  document.getElementById("content").innerHTML = html;
+  renderTopNav();
+}
+
+function goToQuiz() {
+  phase = "quiz";
+  renderQuiz();
+}
+
+function selectAnswer(i) {
+  if (answered) return;
+  answered = true;
+  var stop = stops[current];
+  document.getElementById("error-msg").style.display = "none";
+  for (var k = 0; k < shuffledIdx.length; k++) {
+    var j = shuffledIdx[k];
+    var btn = document.getElementById("opt-" + j);
+    btn.style.pointerEvents = "none";
+    if (j === stop.correct) {
+      btn.style.borderColor = EXPLAIN_COLOR;
+      btn.style.background = EXPLAIN_BG;
+      btn.style.color = EXPLAIN_COLOR;
+    } else if (j === i) {
+      btn.style.borderColor = "var(--border-danger)";
+      btn.style.background = "var(--bg-danger)";
+      btn.style.color = "var(--text-danger)";
+    }
+  }
+  var fb = document.getElementById("feedback");
+  fb.style.color = EXPLAIN_COLOR;
+  if (i === stop.correct) {
+    score++;
+    renderTopNav();
+    fb.innerHTML = '正解! ' + stop.explain;
+  } else {
+    fb.innerHTML = '残念! ' + stop.explain;
+  }
+  var nextBtn = document.getElementById("next-btn");
+  nextBtn.style.opacity = "1";
+  nextBtn.style.pointerEvents = "auto";
+}
+
+function goNext() {
+  if (!answered) {
+    document.getElementById("error-msg").style.display = "block";
+    return;
+  }
+  if (current < stops.length - 1) {
+    current++;
+    phase = "fact";
+    renderFact();
+  } else {
+    renderResult();
+  }
+}
+
+function renderResult() {
+  stopSpeech();
+  var pct = Math.round((score / stops.length) * 100);
+  var title, msg, icon;
+  if (score === stops.length) {
+    title = "台北101マスター";
+    msg = "満点です。もう台北101のガイドができますね。";
+    icon = "ti-trophy";
+  } else if (score >= stops.length / 2) {
+    title = "台北101エキスパート";
+    msg = "台北101についてよく理解できました。";
+    icon = "ti-star";
+  } else {
+    title = "台北101ビギナー";
+    msg = "また遊んで、もっと詳しくなりましょう。";
+    icon = "ti-building-skyscraper";
+  }
+  var html = '';
+  html += '<div style="background:var(--surface-1); border-radius:12px; padding:1.5rem 0.7rem; text-align:center;">';
+  html += '<i class="ti ' + icon + '" style="font-size:60px; color:var(--text-accent);" aria-hidden="true"></i>';
+  html += '<p style="font-size:60px; font-weight:500; margin:14px 0 10px; line-height:1.25;">' + title + '</p>';
+  html += '<p style="font-size:60px; color:var(--text-secondary); margin:0 0 1.1rem; line-height:1.3;">' + msg + '</p>';
+  html += '<p style="font-size:60px; font-weight:500; margin:0;">' + score + ' / ' + stops.length + '</p>';
+  html += '<p style="font-size:60px; color:var(--text-muted); margin:8px 0 1.2rem;">正答率 ' + pct + '%</p>';
+  html += '<button onclick="restart()" style="font-size:60px; padding:16px 16px; width:100%; line-height:1.25;">もう一度ツアーする</button>';
+  html += '</div>';
+  document.getElementById("content").innerHTML = html;
+}
+
+function restart() {
+  current = 0;
+  phase = "fact";
+  score = 0;
+  renderFact();
+}
+
+renderFact();
+</script>
